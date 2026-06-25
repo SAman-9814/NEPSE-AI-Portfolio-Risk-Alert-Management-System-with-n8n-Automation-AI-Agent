@@ -1,0 +1,284 @@
+{
+  "name": "NEPSE Alert AI",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": "everyMinute",
+        "field": "custom",
+        "customRule": "*/30 11-15 * * 0-4"
+      },
+      "id": "schedule-trigger-node",
+      "name": "Schedule Trigger (Market Hours)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "find",
+        "collection": "watchlist",
+        "query": "{\"status\": \"pending\"}"
+      },
+      "id": "mongodb-fetch-watchlist",
+      "name": "Get Watchlist",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        480,
+        200
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "mongodb-credential-id",
+          "name": "MongoDB Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://www.sharesansar.com/today-share-price",
+        "responseFormat": "text",
+        "options": {},
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+          ]
+        }
+      },
+      "id": "http-fetch-sharesansar",
+      "name": "Fetch Live Prices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        480,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const watchlistItems = $('Get Watchlist').all();\nconst fetchNode = $('Fetch Live Prices').first().json;\nconst html = fetchNode.data || fetchNode.body || \"\";\n\nif (!html) {\n  return [];\n}\n\nconst watchlist = watchlistItems.map(item => item.json);\nif (watchlist.length === 0) {\n  return []; // No pending stocks to monitor\n}\n\n// Find the table by ID\nconst tableRegex = /<table[^>]*id=[\"']headFixed[\"'][^>]*>([\\s\\S]*?)<\\/table>/i;\nconst tableMatch = html.match(tableRegex);\nif (!tableMatch) {\n  return [];\n}\n\nconst tableContent = tableMatch[1];\nconst tbodyRegex = /<tbody[^>]*>([\\s\\S]*?)<\\/tbody>/i;\nconst tbodyMatch = tableContent.match(tbodyRegex);\nconst bodyContent = tbodyMatch ? tbodyMatch[1] : tableContent;\n\nconst rowRegex = /<tr[^>]*>([\\s\\S]*?)<\\/tr>/gi;\nlet rowMatch;\nconst stocks = {};\n\nconst cleanNum = (str) => {\n  const val = parseFloat(str.replace(/,/g, ''));\n  return isNaN(val) ? 0 : val;\n};\n\nwhile ((rowMatch = rowRegex.exec(bodyContent)) !== null) {\n  const rowHtml = rowMatch[1];\n  if (rowHtml.includes('<th')) continue;\n\n  const cellRegex = /<td[^>]*>([\\s\\S]*?)<\\/td>/gi;\n  let cellMatch;\n  const cells = [];\n  while ((cellMatch = cellRegex.exec(rowHtml)) !== null) {\n    cells.push(cellMatch[1].replace(/<[^>]*>/g, '').trim());\n  }\n\n  if (cells.length >= 18) {\n    const symbol = cells[1].toUpperCase();\n    stocks[symbol] = {\n      symbol: symbol,\n      open: cleanNum(cells[3]),\n      high: cleanNum(cells[4]),\n      low: cleanNum(cells[5]),\n      close: cleanNum(cells[6]),\n      ltp: cleanNum(cells[7]),\n      changePercent: cleanNum(cells[17]),\n      volume: cleanNum(cells[11]),\n      turnover: cleanNum(cells[13]),\n      diff: cleanNum(cells[15])\n    };\n  }\n}\n\nconst alerts = [];\nfor (const watch of watchlist) {\n  const symbol = watch.symbol.toUpperCase();\n  const stock = stocks[symbol];\n  if (stock) {\n    let triggered = false;\n    let triggerType = \"\";\n    let triggerTarget = 0;\n    \n    // Check Take Profit (Target Sell Price)\n    if (watch.targetSellPrice && stock.ltp >= watch.targetSellPrice) {\n      triggered = true;\n      triggerType = \"Take Profit 📈\";\n      triggerTarget = watch.targetSellPrice;\n    }\n    // Check Stop Loss (Target Loss Price)\n    else if (watch.targetLossPrice && stock.ltp <= watch.targetLossPrice) {\n      triggered = true;\n      triggerType = \"Stop Loss 📉\";\n      triggerTarget = watch.targetLossPrice;\n    }\n\n    if (triggered) {\n      alerts.push({\n        \"_id\": watch._id || watch.id,\n        \"symbol\": symbol,\n        \"triggerType\": triggerType,\n        \"triggerTarget\": triggerTarget,\n        \"targetSellPrice\": watch.targetSellPrice || null,\n        \"targetLossPrice\": watch.targetLossPrice || null,\n        \"currentPrice\": stock.ltp,\n        \"open\": stock.open,\n        \"high\": stock.high,\n        \"low\": stock.low,\n        \"volume\": stock.volume,\n        \"changePercent\": stock.changePercent,\n        \"turnover\": stock.turnover,\n        \"diff\": stock.diff\n      });\n    }\n  }\n}\n\nreturn alerts.map(alert => ({ json: alert }));"
+      },
+      "id": "js-scrape-match",
+      "name": "Scrape and Match Targets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-lite:generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "YOUR_GEMINI_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"contents\": [{\"parts\": [{\"text\": \"The stock NEPSE:{{$json.symbol}} has triggered a {{$json.triggerType}} alert because it reached Rs.{{$json.triggerTarget}}. Current price is Rs.{{$json.currentPrice}} (Open: {{$json.open}}, High: {{$json.high}}, Low: {{$json.low}}, Vol: {{$json.volume}}, Diff%: {{$json.changePercent}}%). Act as a professional NEPSE stock analyst. Based on this trigger, today's price range, and volume, give a highly concise 2-sentence recommendation: should the user sell to take profit, cut loss, or hold. Explain the price momentum.\"}]}]}",
+        "options": {}
+      },
+      "id": "http-gemini-ai",
+      "name": "Ask Gemini Recommendation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        940,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nreturn items.map((item, index) => {\n  const geminiText = item.json.candidates[0].content.parts[0].text;\n  const stock = $('Scrape and Match Targets').all()[index].json;\n  return {\n    json: {\n      _id: stock._id,\n      symbol: stock.symbol,\n      triggerType: stock.triggerType,\n      triggerTarget: stock.triggerTarget,\n      targetSellPrice: stock.targetSellPrice,\n      targetLossPrice: stock.targetLossPrice,\n      triggerPrice: stock.currentPrice,\n      recommendation: geminiText.trim(),\n      timestamp: new Date().toISOString(),\n      status: \"triggered\",\n      triggeredAt: new Date().toISOString()\n    }\n  };\n});"
+      },
+      "id": "js-format-alert",
+      "name": "Format Alert Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toEmail": "={{$secrets.USER_EMAIL}}",
+        "subject": "=🚨 NEPSE Alert: {{$json.symbol}} ({{$json.triggerType}}) Reached! 🚨",
+        "emailType": "html",
+        "message": "=<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);\">\n  <div style=\"background: {{$json.triggerType.includes('Take Profit') ? 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)' : 'linear-gradient(135deg, #cb2d3e 0%, #ef473a 100%)'}}; color: #ffffff; padding: 20px; text-align: center;\">\n    <h2 style=\"margin: 0; font-size: 24px; font-weight: bold; letter-spacing: 0.5px;\">🚨 NEPSE Alert: {{$json.triggerType}}</h2>\n    <p style=\"margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;\">Stock Risk Monitoring System</p>\n  </div>\n  <div style=\"padding: 25px; background-color: #fafafa;\">\n    <p style=\"font-size: 16px; color: #333333; margin-top: 0;\">The stock <strong>{{$json.symbol}}</strong> has reached your target! </p>\n    \n    <table style=\"width: 100%; border-collapse: collapse; margin: 20px 0; background-color: #ffffff; border-radius: 6px; overflow: hidden;\">\n      <tr style=\"border-bottom: 1px solid #f0f0f0;\">\n        <td style=\"padding: 12px 15px; font-weight: bold; color: #555555; width: 40%;\">Current Price (LTP)</td>\n        <td style=\"padding: 12px 15px; font-size: 16px; font-weight: bold; color: {{$json.triggerType.includes('Take Profit') ? '#28a745' : '#dc3545'}};\">Rs. {{$json.triggerPrice}}</td>\n      </tr>\n      <tr style=\"border-bottom: 1px solid #f0f0f0;\">\n        <td style=\"padding: 12px 15px; font-weight: bold; color: #555555;\">Trigger Target Price</td>\n        <td style=\"padding: 12px 15px; font-weight: bold; color: #333333;\">Rs. {{$json.triggerTarget}}</td>\n      </tr>\n      <tr style=\"border-bottom: 1px solid #f0f0f0;\">\n        <td style=\"padding: 12px 15px; font-weight: bold; color: #555555;\">Today's High / Low</td>\n        <td style=\"padding: 12px 15px; color: #333333;\">Rs. {{$node[\"Scrape and Match Targets\"].json.high}} / Rs. {{$node[\"Scrape and Match Targets\"].json.low}}</td>\n      </tr>\n      <tr style=\"border-bottom: 1px solid #f0f0f0;\">\n        <td style=\"padding: 12px 15px; font-weight: bold; color: #555555;\">Traded Volume</td>\n        <td style=\"padding: 12px 15px; color: #333333;\">{{$node[\"Scrape and Match Targets\"].json.volume}}</td>\n      </tr>\n      <tr style=\"border-bottom: 1px solid #f0f0f0;\">\n        <td style=\"padding: 12px 15px; font-weight: bold; color: #555555;\">Target Sell (Profit)</td>\n        <td style=\"padding: 12px 15px; color: #555555;\">Rs. {{$json.targetSellPrice || 'Not Set'}}</td>\n      </tr>\n      <tr style=\"border-bottom: 1px solid #f0f0f0;\">\n        <td style=\"padding: 12px 15px; font-weight: bold; color: #555555;\">Target Loss (Stop Loss)</td>\n        <td style=\"padding: 12px 15px; color: #555555;\">Rs. {{$json.targetLossPrice || 'Not Set'}}</td>\n      </tr>\n      <tr>\n        <td style=\"padding: 12px 15px; font-weight: bold; color: #555555;\">Daily Change</td>\n        <td style=\"padding: 12px 15px; font-weight: bold; color: {{$node[\"Scrape and Match Targets\"].json.changePercent >= 0 ? '#28a745' : '#dc3545'}};\">{{$node[\"Scrape and Match Targets\"].json.changePercent}}%</td>\n      </tr>\n    </table>\n\n    <div style=\"background-color: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; border-radius: 4px; margin-top: 25px;\">\n      <h4 style=\"margin: 0 0 8px 0; color: #0d47a1; font-size: 15px;\">🤖 AI Analyst Recommendation</h4>\n      <p style=\"margin: 0; color: #1565c0; font-size: 14px; line-height: 1.5;\">{{$json.recommendation}}</p>\n    </div>\n  </div>\n  <div style=\"background-color: #f1f1f1; padding: 15px; text-align: center; font-size: 12px; color: #777777; border-top: 1px solid #e0e0e0;\">\n    This is an automated stock alert from your NEPSE Alert AI system.\n  </div>\n</div>",
+        "additionalFields": {}
+      },
+      "id": "gmail-notification-node",
+      "name": "Send Gmail Notification",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [
+        1380,
+        300
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "gmail-credential-id",
+          "name": "Gmail Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "collection": "watchlist",
+        "updateKey": "_id",
+        "fields": "status,triggeredAt"
+      },
+      "id": "mongodb-update-watchlist",
+      "name": "Update Watchlist Status",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        200
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "mongodb-credential-id",
+          "name": "MongoDB Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "alerts_history",
+        "fields": "symbol,targetSellPrice,targetLossPrice,triggerPrice,triggerType,triggerTarget,recommendation,timestamp"
+      },
+      "id": "mongodb-log-history",
+      "name": "Log Alert History",
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        1820,
+        200
+      ],
+      "credentials": {
+        "mongoDb": {
+          "id": "mongodb-credential-id",
+          "name": "MongoDB Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (Market Hours)": {
+      "main": [
+        [
+          {
+            "node": "Get Watchlist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Watchlist": {
+      "main": [
+        [
+          {
+            "node": "Fetch Live Prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Live Prices": {
+      "main": [
+        [
+          {
+            "node": "Scrape and Match Targets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape and Match Targets": {
+      "main": [
+        [
+          {
+            "node": "Ask Gemini Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask Gemini Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Format Alert Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Alert Message": {
+      "main": [
+        [
+          {
+            "node": "Send Gmail Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Watchlist Status",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Alert History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Gmail Notification": {
+      "main": [
+        []
+      ]
+    },
+    "Update Watchlist Status": {
+      "main": [
+        []
+      ]
+    },
+    "Log Alert History": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionTimeout": -1
+  },
+  "meta": {
+    "templateId": ""
+  }
+}
