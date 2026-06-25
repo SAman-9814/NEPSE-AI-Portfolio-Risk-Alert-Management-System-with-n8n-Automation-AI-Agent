@@ -44,6 +44,20 @@ const AlertHistory = mongoose.model('AlertHistory', alertHistorySchema);
 
 // REST API Endpoints
 
+// 0. Root Endpoint
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Welcome to the NEPSE AI Portfolio Risk API Server',
+    status: 'online',
+    endpoints: {
+      status: '/api/status',
+      watchlist: '/api/watchlist',
+      alerts: '/api/alerts',
+      chat: '/api/chat'
+    }
+  });
+});
+
 // 1. Health & Connection Status Check
 app.get('/api/status', (req, res) => {
   const dbStatus = mongoose.connection.readyState;
