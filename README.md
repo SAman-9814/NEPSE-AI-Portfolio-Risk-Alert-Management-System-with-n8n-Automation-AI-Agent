@@ -10,6 +10,18 @@ NEPSE AI is a SaaS-grade, production-ready portfolio risk management ecosystem d
 ### n8n Automation Workflow
 ![n8n Alert Workflow](assets/n8n_workflow.png)
 
+## 💻 Technology Stack & Expertise
+
+This ecosystem uses a modern, high-performance tech stack designed for scalability, low latency, and responsive data visualization:
+
+- **Frontend Core**: **React 19** + **Vite 8** for fast bundling, hot module reloading (HMR), and efficient client-side rendering.
+- **Styling & UI**: **Tailwind CSS v4** (including fluid responsive container queries, CSS grids, and customized periwinkle-lavender theme states) + **Lucide Icons** for vector-based UI indicators.
+- **Data Visualization**: **Apache ECharts** (via `echarts-for-react`) utilizing SVG rendering for crisp, responsive price comparison gauge/bar charts.
+- **Backend API**: **Node.js** + **Express.js** providing REST endpoints for watchlist CRUD operations, status checks, and proxied Gemini AI chat threads.
+- **Database Layer**: **MongoDB Atlas** + **Mongoose ODM** handling schema enforcement, indexing, and state tracking for pending and triggered alerts.
+- **Orchestration & Workflow**: **n8n Cloud** coordinating scheduled cron jobs, data scrapers, Gemini API nodes, Gmail SMTP nodes, and database state updates.
+- **Artificial Intelligence**: **Google Gemini (gemini-3.1-flash-lite)** invoked dynamically via HTTP REST for contextual portfolio question-answering and alert risk analysis.
+
 ---
 
 ## 🌟 Key Features
