@@ -221,10 +221,6 @@ User's Question:
 });
 
 // Start Server
-if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
-  app.listen(PORT, () => {
-    console.log(`Express API Server running on port ${PORT}`);
-  });
-}
-
-export default app;
+app.listen(PORT, () => {
+  console.log(`Express API Server running on port ${PORT}`);
+});
