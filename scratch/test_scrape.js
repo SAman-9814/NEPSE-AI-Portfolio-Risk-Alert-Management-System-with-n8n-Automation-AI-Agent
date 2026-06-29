@@ -121,6 +121,11 @@ async function run() {
     const stocks = parseSharePrices(html);
     console.log(`Successfully parsed ${stocks.length} stocks.`);
 
+    const ymhlStock = stocks.find(s => s.symbol.toUpperCase() === 'YMHL');
+    console.log("\n*** DEBUG YMHL DETAILS ***");
+    console.log(ymhlStock);
+    console.log("**************************\n");
+
     if (stocks.length === 0) {
       console.log("No stocks parsed. Please check if table selector is correct.");
       return;
@@ -133,8 +138,9 @@ async function run() {
     // Mock Watchlist
     const mockWatchlist = [
       { symbol: 'AHPC', targetSellPrice: 150.0 },
-      { symbol: 'NABIL', targetSellPrice: 200.0 }, // Nabilla is usually higher but let's see
-      { symbol: 'GBIME', targetSellPrice: 100.0 }
+      { symbol: 'NABIL', targetSellPrice: 200.0 },
+      { symbol: 'GBIME', targetSellPrice: 100.0 },
+      { symbol: 'YMHL', targetSellPrice: 665.0 }
     ];
 
     console.log("\n--- Simulating Watchlist Alerts ---");
