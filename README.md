@@ -28,6 +28,8 @@ This ecosystem uses a modern, high-performance tech stack designed for scalabili
 
 ### 1. Modern Glassmorphic Dashboard (React & Tailwind v4)
 - **Fluid Responsiveness**: Native mobile sidebar drawers, responsive grid layouts, and width-scaling floating panels that adapt seamlessly from 320px mobile screens to large desktop monitors.
+- **Mobile Hamburger & Overlay Backdrop**: Responsive header hamburger trigger button and click-outside backdrop overlays for mobile navigation.
+- **Overlay Details Sheet**: Refactored the details side panel into a floating, layout-preserving sliding sheet drawer (`fixed md:absolute`) to prevent page element squishing.
 - **Obsidian Dark & Clean Light Modes**: Transition animations between a premium obsidian-plum dark palette (`#08060c`) and a clean off-white layout.
 - **KPI Summary Metrics**: Real-time totals of active watchlist counts, triggered alerts, pending profits, and stop-loss boundaries.
 - **Dynamic ECharts Visualizations**: Dynamic bar and gauge charts comparing execution prices directly against custom profit/loss target thresholds.
@@ -39,12 +41,17 @@ This ecosystem uses a modern, high-performance tech stack designed for scalabili
 - **Gemini AI Integration**: Powers conversational chat requests by combining user queries with real-time portfolio watchlist and alert history contexts.
 
 ### 3. n8n Automation AI Agent
-- **Autonomous Price Scraper**: Automatically scrapes live stock prices from ShareSansar during NEPSE market trading hours (Sunday to Thursday, 11:00 AM – 3:00 PM Nepal Time).
+- **Autonomous Live Market Scraper**: Automatically scrapes real-time stock prices from ShareSansar's Live Trading Board (`https://www.sharesansar.com/live-trading`) during active NEPSE trading hours (Monday to Friday, or Sunday to Thursday based on configuration) to avoid end-of-day price lag.
+- **Refactored Column Mapper**: Adjusted to map ShareSansar's 10-column live trading board table indexes (LTP, Point Change, % Change, Open, High, Low, Volume) dynamically.
 - **Intelligent Alert Matching**: Matches live prices against your custom target prices:
   - **Take Profit (LTP >= targetSellPrice)** 📈
   - **Stop Loss (LTP <= targetLossPrice)** 📉
 - **AI Decision Node**: Calls the Google Gemini LLM to analyze the stock's volume, daily price range, and momentum to draft a personalized Sell/Hold/Buy action recommendation.
 - **State & Notification Orchestration**: Updates watchlist items to `triggered` in MongoDB, logs transaction history, and dispatches rich HTML emails to your Gmail inbox.
+
+### 4. Local Scraping & Diagnostic Scripts
+- **test_scrape.js**: CLI test harness to fetch and simulate the old today share price matching logic.
+- **test_live_scrape.js**: Real-time CLI verification tool to test connections, fetch live trading indexes, and diagnose target prices (e.g., verifying YMHL live LTP triggers) from the terminal.
 
 ---
 
